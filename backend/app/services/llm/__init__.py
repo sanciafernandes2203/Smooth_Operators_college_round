@@ -10,6 +10,7 @@ from app.services.llm.llm_client import (
     get_llm_client,
     close_llm_client,
 )
+from app.services.llm.claim_extractor import ClaimExtractor
 
 __all__ = [
     "BaseLLMClient",
@@ -19,4 +20,5 @@ __all__ = [
     "LLMError",
     "get_llm_client",
     "close_llm_client",
+    "ClaimExtractor",
 ]

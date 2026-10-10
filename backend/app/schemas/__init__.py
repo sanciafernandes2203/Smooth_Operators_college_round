@@ -14,6 +14,12 @@ from app.schemas.audit import (
     ClaimResponse,
     EvidenceResponse,
 )
+from app.schemas.claim import (
+    ExtractedClaim,
+    ClaimExtractionRequest,
+    ClaimExtractionResponse,
+    ClaimCreate,
+)
 
 __all__ = [
     # Errors
@@ -30,4 +36,9 @@ __all__ = [
     "AuditSummaryResponse",
     "ClaimResponse",
     "EvidenceResponse",
+    # Claim Extraction
+    "ExtractedClaim",
+    "ClaimExtractionRequest",
+    "ClaimExtractionResponse",
+    "ClaimCreate",
 ]
