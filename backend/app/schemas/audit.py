@@ -83,7 +83,7 @@ class EvidenceResponse(BaseModel):
     document_name: str = Field(..., description="Source document filename")
     page_number: Optional[int] = Field(None, description="Page number if available")
     quote: str = Field(..., description="Exact quotation from source")
-    relationship: str = Field(..., description="Relationship: supports, contradicts, context, insufficient")
+    relationship_type: str = Field(..., description="Relationship: supports, contradicts, context, insufficient", alias="relationship")
     validated: bool = Field(..., description="Whether quotation was validated against source")
 
 

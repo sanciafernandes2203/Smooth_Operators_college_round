@@ -185,6 +185,7 @@ class Evidence(Base):
     passage_text: Mapped[str] = mapped_column(Text, nullable=False)
     page_number: Mapped[int | None] = mapped_column(nullable=True)
     relationship_type: Mapped[str] = mapped_column(
+        "relationship",
         String(20),
         nullable=False,
     )

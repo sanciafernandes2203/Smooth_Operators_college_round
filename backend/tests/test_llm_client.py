@@ -307,7 +307,7 @@ class TestGeminiClient:
         }
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.json = AsyncMock(side_effect=[response_data, response_data])
+        mock_response.json = MagicMock(return_value=response_data)
         client.client.post = AsyncMock(return_value=mock_response)
 
         response = await client.complete("Hello")
@@ -321,7 +321,7 @@ class TestGeminiClient:
         """Test invalid API key handling."""
         mock_response = MagicMock()
         mock_response.status_code = 400
-        mock_response.json = AsyncMock(return_value={
+        mock_response.json = MagicMock(return_value={
             "error": {"message": "API_KEY_INVALID"}
         })
         client.client.post = AsyncMock(return_value=mock_response)

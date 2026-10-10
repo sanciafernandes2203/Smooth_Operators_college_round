@@ -22,6 +22,9 @@ from app.schemas.audit import (
     AuditDetailResponse,
     AuditListItem,
     AuditListResponse,
+    AuditSummaryResponse,
+    ClaimResponse,
+    EvidenceResponse,
 )
 from app.schemas.errors import ErrorCodes, create_error_response
 from app.services.audit_service import AuditService
@@ -255,6 +258,9 @@ async def get_audit(
     Returns 404 if audit does not exist.
     """
     try:
+        import logging
+        logger = logging.getLogger(__name__)
+        
         audit = await audit_service.get_audit(audit_id)
         if audit is None:
             raise HTTPException(
@@ -266,20 +272,19 @@ async def get_audit(
             )
 
         # Build response from audit data
-        # Note: For Stage 3, claims and evidence will be empty since processing
-        # is not yet implemented. This structure supports later stages.
         claims_response = []
         for claim in audit.claims:
             evidence_response = []
             for ev in claim.evidence:
                 doc_name = ev.document.file_name if ev.document else "unknown"
+                logger.debug(f"Processing evidence: id={ev.id}, relationship_type={ev.relationship_type}")
                 evidence_response.append(
                     EvidenceResponse(
                         document_id=ev.document_id or UUID("00000000-0000-0000-0000-000000000000"),
                         document_name=doc_name,
                         page_number=ev.page_number,
                         quote=ev.passage_text,
-                        relationship=ev.relationship,
+                        relationship_type=ev.relationship_type,
                         validated=ev.validated,
                     )
                 )
@@ -325,6 +330,7 @@ async def get_audit(
     except HTTPException:
         raise
     except DatabaseError as e:
+        logger.error(f"Database error retrieving audit {audit_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=create_error_response(
@@ -332,7 +338,8 @@ async def get_audit(
                 message=f"Database error: {e.message}",
             ).model_dump(),
         )
-    except Exception:
+    except Exception as e:
+        logger.error(f"Unexpected error retrieving audit {audit_id}: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=create_error_response(

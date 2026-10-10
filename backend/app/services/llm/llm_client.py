@@ -558,7 +558,7 @@ class GeminiClient(BaseLLMClient):
 
         if response.status_code == 400:
             try:
-                error_data = await response.json()
+                error_data = response.json()
                 msg = error_data.get("error", {}).get("message", response.text)
                 if "API_KEY_INVALID" in msg or "API key" in msg:
                     raise LLMError(
@@ -596,7 +596,7 @@ class GeminiClient(BaseLLMClient):
             )
         elif response.status_code != 200:
             try:
-                error_data = await response.json()
+                error_data = response.json()
                 msg = error_data.get("error", {}).get("message", response.text)
             except Exception:
                 msg = response.text
@@ -609,7 +609,7 @@ class GeminiClient(BaseLLMClient):
             )
 
         try:
-            data = await response.json()
+            data = response.json()
         except Exception as e:
             raise LLMError(
                 message=f"Failed to parse response: {e}",
