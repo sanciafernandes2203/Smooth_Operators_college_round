@@ -25,6 +25,10 @@ from app.schemas.audit import (
 )
 from app.schemas.errors import ErrorCodes, create_error_response
 from app.services.audit_service import AuditService
+from app.utils.file_validation import (
+    FileValidationError,
+    validate_upload_file,
+)
 
 router = APIRouter()
 
@@ -39,18 +43,19 @@ async def get_audit_service(session: AsyncSession = Depends(get_db_session)) -> 
     response_model=AuditCreateResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create a new audit",
-    description="Submit an AI-generated answer and optional source text for auditing. Returns an audit ID and initial processing status.",
+    description="Submit an AI-generated answer and optional source text/files for auditing. Returns an audit ID and initial processing status.",
     responses={
         201: {"description": "Audit created successfully", "model": AuditCreateResponse},
         400: {"description": "Invalid input", "model": create_error_response.__annotations__["return"]},
         413: {"description": "Input too large", "model": create_error_response.__annotations__["return"]},
+        415: {"description": "Unsupported file type", "model": create_error_response.__annotations__["return"]},
         500: {"description": "Database error", "model": create_error_response.__annotations__["return"]},
     },
 )
 async def create_audit(
     answer: str = Form(..., description="The AI-generated answer to audit"),
     source_text: Optional[str] = Form(None, description="Pasted source text to audit against"),
-    files: list[UploadFile] = File(default_factory=list, description="Uploaded source files (not processed in Stage 3)"),
+    files: list[UploadFile] = File(default_factory=list, description="Uploaded source files (PDF, TXT, JPG, PNG)"),
     audit_service: AuditService = Depends(get_audit_service),
     settings=Depends(get_settings),
 ) -> AuditCreateResponse:
@@ -60,7 +65,7 @@ async def create_audit(
     Accepts:
     - answer: Required AI-generated answer text
     - source_text: Optional pasted source text
-    - files: Optional uploaded files (stored but not processed in Stage 3)
+    - files: Optional uploaded files (PDF, TXT, JPG, JPEG, PNG)
 
     Returns:
     - audit_id: Unique identifier for the audit
@@ -91,8 +96,8 @@ async def create_audit(
         )
 
     # Validate input sizes
-    max_answer_size = settings.max_upload_size_bytes  # Reuse upload limit for answer
-    if len(answer.encode("utf-8")) > max_answer_size:
+    max_upload_size = settings.max_upload_size_bytes
+    if len(answer.encode("utf-8")) > max_upload_size:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail=create_error_response(
@@ -101,7 +106,7 @@ async def create_audit(
             ).model_dump(),
         )
 
-    if source_text and len(source_text.encode("utf-8")) > max_answer_size:
+    if source_text and len(source_text.encode("utf-8")) > max_upload_size:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail=create_error_response(
@@ -110,26 +115,44 @@ async def create_audit(
             ).model_dump(),
         )
 
-    # Validate file sizes and types (basic validation for Stage 3)
+    # Validate and read files
+    processed_files = []
     for file in files:
-        if file.filename:
-            content = await file.read()
-            if len(content) > max_answer_size:
-                raise HTTPException(
-                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                    detail=create_error_response(
-                        code=ErrorCodes.FILE_TOO_LARGE,
-                        message=f"File '{file.filename}' exceeds maximum size of {settings.max_upload_size_mb} MB",
-                    ).model_dump(),
-                )
-            # Reset file position for potential future processing
-            await file.seek(0)
+        if not file.filename:
+            continue
+
+        try:
+            content, safe_filename = await validate_upload_file(file, max_size_mb=settings.max_upload_size_mb)
+            processed_files.append((content, safe_filename, file.content_type or "application/octet-stream"))
+        except FileValidationError as e:
+            raise HTTPException(
+                status_code=(
+                    status.HTTP_415_UNSUPPORTED_MEDIA_TYPE
+                    if e.code == ErrorCodes.UNSUPPORTED_FILE_TYPE
+                    else status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
+                ),
+                detail=create_error_response(
+                    code=e.code,
+                    message=e.message,
+                ).model_dump(),
+            )
+
+    # Re-validate at least one source after file validation
+    if not has_source_text and not processed_files:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=create_error_response(
+                code=ErrorCodes.INVALID_INPUT,
+                message="At least one source must be provided (source_text or files)",
+            ).model_dump(),
+        )
 
     try:
-        # Create audit with the service
-        result = await audit_service.create_audit(
+        # Create audit with file processing
+        result = await audit_service.create_audit_with_files(
             answer=answer.strip(),
             source_text=source_text.strip() if source_text else None,
+            files=processed_files,
         )
         return result
 

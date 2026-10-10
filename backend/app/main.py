@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import get_settings
 from app.api.routes import health, audits
 from app.db.database import get_database_manager
+from app.services.llm.llm_client import close_llm_client
 
 
 @asynccontextmanager
@@ -27,6 +28,7 @@ async def lifespan(app: FastAPI):
     # Shutdown
     db_manager = get_database_manager()
     await db_manager.close()
+    await close_llm_client()
     print("Shutting down Second Opinion Backend")
 
 

@@ -99,7 +99,7 @@ Health check: http://localhost:8000/api/health
 **Fields:**
 - `answer` (required): The AI-generated answer to audit
 - `source_text` (optional): Pasted source text to audit against
-- `files` (optional): Uploaded source files (not processed in Stage 3)
+- `files` (optional): Uploaded source files (PDF, TXT, JPG, JPEG, PNG)
 
 **Response (201):**
 ```json
@@ -113,7 +113,73 @@ Health check: http://localhost:8000/api/health
 **Error Responses:**
 - 400: Missing or empty required fields
 - 413: Input exceeds size limit
+- 415: Unsupported file type
 - 500: Database or internal error
+
+### Document Processing (Stage 4)
+
+The backend now supports processing of uploaded source documents:
+
+**Supported file types:**
+- **TXT** — Plain text files with automatic encoding detection (UTF-8, Latin-1, CP1252)
+- **PDF** — Text-based PDFs using PyMuPDF (page-by-page extraction with provenance)
+- **JPG/JPEG** — Images via Tesseract OCR
+- **PNG** — Images via Tesseract OCR
+
+**Features:**
+- Page-level provenance for PDF documents
+- Automatic detection of scanned/image-only PDF pages
+- OCR processing for scanned pages and image files
+- Configurable page limit (default: no limit)
+- File size validation (default 15 MB, configurable via `MAX_UPLOAD_SIZE_MB`)
+- Secure temporary file handling with automatic cleanup
+- Structured extraction results with document ID, filename, page numbers, and extraction method
+
+**PDF Processing Details:**
+- Extracts text page by page preserving page numbers
+- Detects pages with little/no extractable text (likely scanned)
+- Flags potentially scanned pages for OCR processing
+- Handles encrypted, corrupted, and empty PDFs gracefully
+- Preserves extraction method metadata (pymupdf, tesseract)
+
+**OCR Processing:**
+- Uses Tesseract via pytesseract
+- Supports multiple languages (default: English)
+- Returns confidence scores for extracted text
+- Processes both uploaded images and scanned PDF pages
+- Requires Tesseract executable installed separately (see below)
+
+### LLM Client Integration (Stage 5)
+
+The backend includes a unified LLM client supporting multiple providers:
+
+**Supported Providers:**
+- **OpenAI** — GPT-4o, GPT-4o-mini, etc.
+- **Anthropic** — Claude 3 Haiku, Sonnet, Opus
+- **Google Gemini** — Gemini 1.5 Flash, Pro
+
+**Features:**
+- Unified interface via `LLMClientFactory`
+- Configurable via environment variables (`LLM_PROVIDER`, `LLM_API_KEY`, `LLM_MODEL`)
+- Automatic retries with exponential backoff (configurable)
+- Timeout handling (default 60s)
+- Structured output support where provider supports it (OpenAI JSON mode, Gemini JSON mode)
+- Comprehensive error handling (auth, rate limits, timeouts, connection errors)
+- Secure credential handling (never logged)
+- Provider-specific details encapsulated in client classes
+
+**Usage:**
+```python
+from app.services.llm import get_llm_client
+
+client = get_llm_client()  # Creates client from environment config
+response = await client.complete(
+    user_prompt="Analyze this claim...",
+    system_prompt="You are a fact-checker...",
+    temperature=0.0,
+    response_format={"type": "json_object"}  # Where supported
+)
+```
 
 ### Running Tests
 
@@ -148,7 +214,14 @@ backend/
 │   │   ├── __init__.py
 │   │   ├── audit_service.py
 │   │   ├── documents/
+│   │   │   ├── __init__.py
+│   │   │   ├── document_service.py
+│   │   │   ├── pdf_extractor.py
+│   │   │   ├── ocr_service.py
+│   │   │   └── text_chunker.py
 │   │   ├── llm/
+│   │   │   ├── __init__.py
+│   │   │   └── llm_client.py
 │   │   ├── retrieval/
 │   │   ├── verification/
 │   │   └── reports/
@@ -164,7 +237,9 @@ backend/
 ├── tests/
 │   ├── __init__.py
 │   ├── test_health.py
-│   └── test_audits.py
+│   ├── test_audits.py
+│   ├── test_documents.py
+│   └── test_llm_client.py
 ├── sql/
 │   └── schema.sql
 ├── requirements.txt
@@ -212,6 +287,11 @@ Then set `LLM_PROVIDER`, `LLM_API_KEY`, `LLM_MODEL` in `.env`.
 - On Windows, set `TESSERACT_CMD` in `.env` if not in PATH
 - Test with: `tesseract --version`
 
+**Windows Tesseract Installation:**
+1. Download installer from https://github.com/UB-Mannheim/tesseract/wiki
+2. Install to default location (`C:\Program Files\Tesseract-OCR\`)
+3. Add to PATH or set `TESSERACT_CMD=C:\Program Files\Tesseract-OCR\tesseract.exe` in `.env`
+
 ### Troubleshooting
 
 **"ModuleNotFoundError: No module named 'fitz'"**
@@ -225,3 +305,6 @@ Then set `LLM_PROVIDER`, `LLM_API_KEY`, `LLM_MODEL` in `.env`.
 
 **CORS errors from frontend**
 → Ensure `FRONTEND_ORIGIN` matches your frontend URL exactly
+
+**"'coroutine' object is not subscriptable" in LLM client**
+→ Ensure `await response.json()` is used (fixed in Stage 5)

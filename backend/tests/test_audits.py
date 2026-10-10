@@ -33,7 +33,7 @@ class TestAuditCreate:
         """Test creating an audit with valid answer and source_text."""
         # Override the dependency
         mock_audit_service = AsyncMock()
-        mock_audit_service.create_audit.return_value = AuditCreateResponse(
+        mock_audit_service.create_audit_with_files.return_value = AuditCreateResponse(
             audit_id=uuid4(),
             status="PROCESSING",
             created_at="2026-10-10T12:00:00Z",

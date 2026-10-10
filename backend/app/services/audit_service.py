@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.repositories import AuditRepository, SourceDocumentRepository
 from app.db.models import Audit
 from app.schemas.audit import AuditCreateResponse
+from app.services.documents import DocumentService, DocumentProcessingResult
 
 
 class AuditService:
@@ -21,6 +22,7 @@ class AuditService:
         self.session = session
         self.audit_repo = AuditRepository(session)
         self.doc_repo = SourceDocumentRepository(session)
+        self.document_service = DocumentService()
 
     async def create_audit(
         self,
@@ -30,10 +32,36 @@ class AuditService:
         title: Optional[str] = None,
     ) -> AuditCreateResponse:
         """
-        Create a new audit with initial data.
+        Create a new audit with initial data (no file processing).
 
-        For Stage 3, we only persist the audit and source text metadata.
-        The actual processing (claim extraction, verification) happens in later stages.
+        For backward compatibility with Stage 3 API.
+        """
+        return await self.create_audit_with_files(
+            answer=answer,
+            source_text=source_text,
+            title=title,
+            files=None,
+        )
+
+    async def create_audit_with_files(
+        self,
+        *,
+        answer: str,
+        source_text: Optional[str] = None,
+        files: Optional[list[tuple[bytes, str, str]]] = None,  # (content, filename, mime_type)
+        title: Optional[str] = None,
+    ) -> AuditCreateResponse:
+        """
+        Create a new audit with file processing.
+
+        Args:
+            answer: The AI-generated answer to audit
+            source_text: Optional pasted source text
+            files: Optional list of (content, filename, mime_type) tuples
+            title: Optional audit title
+
+        Returns:
+            AuditCreateResponse with audit_id and status
         """
         # Create the audit record
         audit = await self.audit_repo.create(
@@ -42,7 +70,7 @@ class AuditService:
             status="PROCESSING",
         )
 
-        # Create a source document record for pasted text if provided
+        # Process pasted source text
         if source_text and source_text.strip():
             await self.doc_repo.create(
                 audit_id=audit.id,
@@ -52,6 +80,19 @@ class AuditService:
                 processing_status="PROCESSED",
                 page_count=1,
             )
+
+        # Process uploaded files
+        if files:
+            doc_results = self.document_service.process_multiple(files)
+            for doc_result in doc_results:
+                await self.doc_repo.create(
+                    audit_id=audit.id,
+                    file_name=doc_result.filename,
+                    mime_type=doc_result.mime_type,
+                    storage_path=None,
+                    processing_status=doc_result.processing_status,
+                    page_count=doc_result.page_count,
+                )
 
         # Commit the transaction
         await self.session.commit()
