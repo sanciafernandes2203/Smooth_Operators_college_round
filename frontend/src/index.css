@@ -1,0 +1,51 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+}
+
+/* Guard against horizontal overflow from long unbreakable content. */
+html {
+  overflow-x: clip;
+}
+
+body {
+  background-color: #f8fafc; /* slate-50 — airy off-white */
+  color-scheme: light;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Teal selection tint matching the brand accent. */
+::selection {
+  background-color: rgba(20, 184, 166, 0.25);
+  color: #0f172a;
+}
+
+/* Subtle scrollbar that fits the light theme. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1; /* slate-300 */
+  border-radius: 9999px;
+  border: 2px solid #f8fafc;
+}
+
+/* Respect users who prefer reduced motion: disable animations and transitions. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
