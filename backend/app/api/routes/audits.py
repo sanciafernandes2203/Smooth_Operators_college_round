@@ -29,6 +29,8 @@ from app.utils.file_validation import (
     FileValidationError,
     validate_upload_file,
 )
+from fastapi import Query
+from fastapi.responses import PlainTextResponse
 
 router = APIRouter()
 
@@ -336,5 +338,123 @@ async def get_audit(
             detail=create_error_response(
                 code=ErrorCodes.INTERNAL_SERVER_ERROR,
                 message="Failed to retrieve audit",
+            ).model_dump(),
+        )
+
+
+@router.post(
+    "/audits/{audit_id}/process",
+    response_model=dict,
+    summary="Process a full audit",
+    description="Trigger the full audit pipeline: claim extraction, evidence retrieval, verification, and validation.",
+    responses={
+        200: {"description": "Audit processed successfully"},
+        404: {"description": "Audit not found", "model": create_error_response.__annotations__["return"]},
+        500: {"description": "Processing error", "model": create_error_response.__annotations__["return"]},
+    },
+)
+async def process_audit(
+    audit_id: UUID,
+    audit_service: AuditService = Depends(get_audit_service),
+) -> dict:
+    """
+    Process a full audit pipeline.
+
+    This endpoint triggers the complete audit pipeline:
+    1. Extract claims from the answer
+    2. Retrieve evidence for each claim
+    3. Verify each claim against evidence
+    4. Validate evidence quotations and references
+
+    Returns the processing results.
+    """
+    try:
+        result = await audit_service.process_full_audit(audit_id)
+        return result
+    except DatabaseError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=create_error_response(
+                code=e.code,
+                message=f"Database error: {e.message}",
+            ).model_dump(),
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=create_error_response(
+                code=ErrorCodes.INTERNAL_SERVER_ERROR,
+                message=f"Failed to process audit: {str(e)}",
+            ).model_dump(),
+        )
+
+
+@router.get(
+    "/audits/{audit_id}/report",
+    summary="Get audit report",
+    description="Generate and retrieve the audit report in the specified format.",
+    responses={
+        200: {"description": "Audit report", "content": {"text/markdown": {}, "application/json": {}}},
+        404: {"description": "Audit not found", "model": create_error_response.__annotations__["return"]},
+        500: {"description": "Report generation error", "model": create_error_response.__annotations__["return"]},
+    },
+)
+async def get_audit_report(
+    audit_id: UUID,
+    format: str = Query(default="markdown", description="Report format: 'markdown' or 'json'"),
+    audit_service: AuditService = Depends(get_audit_service),
+) -> PlainTextResponse:
+    """
+    Generate and retrieve the audit report in the specified format.
+
+    Supported formats:
+    - markdown (default): Human-readable Markdown report
+    - json: Structured JSON report
+
+    Returns the report as plain text with appropriate content type.
+    """
+    try:
+        audit = await audit_service.get_audit(audit_id)
+        if audit is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=create_error_response(
+                    code=ErrorCodes.AUDIT_NOT_FOUND,
+                    message=f"Audit with ID {audit_id} not found",
+                ).model_dump(),
+            )
+
+        # Generate report
+        format_lower = format.lower()
+        if format_lower not in ("markdown", "json"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=create_error_response(
+                    code=ErrorCodes.INVALID_INPUT,
+                    message=f"Unsupported format: {format}. Supported formats: markdown, json",
+                ).model_dump(),
+            )
+
+        report = audit_service.generate_report(audit, format_lower)
+
+        media_type = "text/markdown" if format_lower == "markdown" else "application/json"
+        return PlainTextResponse(content=report, media_type=media_type)
+
+    except HTTPException:
+        raise
+    except DatabaseError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=create_error_response(
+                code=e.code,
+                message=f"Database error: {e.message}",
+            ).model_dump(),
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=create_error_response(
+                code=ErrorCodes.INTERNAL_SERVER_ERROR,
+                message=f"Failed to generate report: {str(e)}",
             ).model_dump(),
         )

@@ -14,6 +14,8 @@ from app.services.llm.llm_client import (
 )
 from app.services.llm.claim_extractor import ClaimExtractor
 from app.services.retrieval.evidence_retriever import EvidenceRetriever, create_retriever
+from app.services.verification.claim_verifier import ClaimVerifier, VerificationResult
+from app.services.verification.evidence_validator import EvidenceValidator, create_evidence_validator
 
 __all__ = [
     "AuditService",
@@ -29,4 +31,8 @@ __all__ = [
     "ClaimExtractor",
     "EvidenceRetriever",
     "create_retriever",
+    "ClaimVerifier",
+    "VerificationResult",
+    "EvidenceValidator",
+    "create_evidence_validator",
 ]

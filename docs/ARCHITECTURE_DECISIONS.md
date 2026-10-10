@@ -235,3 +235,96 @@
 - Predictable error responses for frontend
 - No leaked credentials or stack traces
 - Graceful degradation (e.g., claim extraction fails → audit marked FAILED)
+
+---
+
+## ADR-015: Claim Verification with Structured LLM Output
+**Date**: 2024-10-10
+**Status**: Accepted
+
+**Context**: Stage 8 requires verifying claims against evidence passages using an LLM. Need structured, validated output.
+
+**Decision**: 
+- Use existing multi-provider `BaseLLMClient` with JSON response format
+- Define strict verdict taxonomy (SUPPORTED, CONTRADICTED, UNSUPPORTED, AMBIGUOUS, POTENTIALLY_UNSAFE, UNABLE_TO_ASSESS)
+- System prompt enforces evidence-only assessment, no outside knowledge
+- LLM returns structured JSON with verdict, explanation, evidence_strength, evidence references
+- Malformed JSON handled gracefully with extraction fallback
+
+**Consequences**:
+- Eliminates fragile regex parsing of LLM output
+- Pydantic validates structure after parsing
+- Handles malformed JSON gracefully (extraction attempt)
+- Consistent interface across providers via `response_format`
+- Clear separation between evidence-based assessment and LLM hallucination
+
+---
+
+## ADR-016: Evidence Validation with Quote Matching
+**Date**: 2024-10-10
+**Status**: Accepted
+
+**Context**: Stage 9 requires validating that LLM-generated evidence quotations actually exist in the source material with correct provenance.
+
+**Decision**: 
+- Exact quote matching with whitespace normalization
+- Partial match detection with configurable similarity threshold (default 0.9)
+- Stopword filtering for relevance scoring
+- Document ID, page number, and document name validation
+- Exact quote matching with whitespace normalization
+- Partial match detection with configurable similarity threshold (default 0.9)
+- Document ID, page number, and document name validation
+- Quotation accuracy validation (exact + partial with warnings)
+- Evidence provenance validation (document ID, page numbers, char offsets)
+- Stopword filtering for relevance scoring
+- Percentage sign (%) and hyphenated term preservation in tokenization
+
+**Consequences**:
+- Eliminates fabricated or hallucinated quotations
+- Detects mismatched document references and incorrect page numbers
+- Detects near-matches with configurable threshold
+- Provides granular validation issues (error/warning/info) per evidence item
+- Maintains provenance chain from source → passage → evidence → verification
+- Configurable matching strictness via `min_match_ratio` parameter
+
+---
+
+## ADR-017: Audit Pipeline State Machine
+**Date**: 2024-10-10
+**Status**: Accepted
+
+**Context**: Need to coordinate multi-stage audit processing (extraction → retrieval → verification → validation) with proper state transitions.
+
+**Decision**: 
+- Audit status flow: `PROCESSING` → `COMPLETED` / `FAILED`
+- Intermediate states: claims extracted → evidence retrieved → verified → validated
+- Failure at any stage marks audit `FAILED` with error details
+- Only fully validated audits reach `COMPLETED`
+- Status updates committed at each stage boundary
+
+**Consequences**:
+- Clear visibility into pipeline progress
+- Partial results available if pipeline fails mid-way
+- Database state always reflects actual progress
+- Easy to query audits by processing stage
+
+---
+
+## ADR-018: Evidence Validation vs Claim Verdict Separation
+**Date**: 2024-10-10
+**Status**: Accepted
+
+**Context**: Need to distinguish between "is this claim supported by evidence?" (verdict) and "are the citations accurate?" (validation).
+
+**Decision**: 
+- Stage 8 (Verification): Determines verdict based on evidence content
+- Stage 9 (Validation): Checks if citations are accurate and verifiable
+- Invalid evidence doesn't automatically flip verdict to CONTRADICTED
+- Validation issues flagged separately from verdict
+- UI can show both: "Claim SUPPORTED, but 1 citation has minor formatting issue"
+
+**Consequences**:
+- Clear separation of concerns
+- More informative UI (shows both verdict and citation quality)
+- Doesn't over-penalize minor citation errors
+- Allows future reassessment if validation reveals systematic issues

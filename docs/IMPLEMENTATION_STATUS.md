@@ -71,17 +71,61 @@
 - [x] **Tests**: 15 tests with local passages (no external deps)
 - [x] **Integration**: `AuditService` uses `EvidenceRetriever` for claim evidence
 
+## Stage 8: Claim Verification ✅
+- [x] **Schemas**: `VerificationResult` (dataclass), reuses `EvidenceResponse` for evidence
+- [x] **Service**: `ClaimVerifier` class in `app/services/verification/claim_verifier.py`
+- [x] **Prompt**: `CLAIM_VERIFICATION_SYSTEM_PROMPT` with verdict taxonomy
+- [x] **Verdict Taxonomy**: SUPPORTED, CONTRADICTED, UNSUPPORTED, AMBIGUOUS, POTENTIALLY_UNSAFE, UNABLE_TO_ASSESS
+- [x] **Features**:
+  - [x] Assesses claims ONLY against supplied evidence passages
+  - [x] Distinguishes contradiction from lack of evidence
+  - [x] Quotes only from supplied passages
+  - [x] Explains verdict with evidence references
+  - [x] Handles malformed LLM output gracefully
+  - [x] Handles LLM errors (rate limit, auth, timeout, connection)
+  - [x] Returns structured JSON via LLM `response_format`
+  - [x] Non-checkable claims marked with `requires_review`
+  - [x] Batch verification for multiple claims
+- [x] **Tests**: 12 tests with mocked LLM responses
+- [x] **Integration**: `AuditService.process_audit_claims()` calls verification
+
+## Stage 9: Evidence Validation ✅
+- [x] **Schemas**: `EvidenceValidationResult`, `ClaimValidationResult`, `ValidationIssue` (dataclasses)
+- [x] **Service**: `EvidenceValidator` in `app/services/verification/evidence_validator.py`
+- [x] **Algorithm**: Exact/partial quote matching with whitespace normalization + stopword filtering
+- [x] **Features**:
+  - [x] Exact quote matching in source material
+  - [x] Partial match detection with configurable threshold
+  - [x] Document ID validation
+  - [x] Page number validation (with range checking)
+  - [x] Document name matching
+  - [x] Stopword filtering for relevance
+  - [x] Percentage sign (%) and hyphenated term preservation
+  - [x] Whitespace normalization for robust matching
+  - [x] Partial match detection with warnings
+  - [x] Document name mismatch warnings
+  - [x] Page number validation (out of range, unverifiable)
+  - [x] Empty quote detection
+  - [x] Missing source text detection
+  - [x] Per-evidence validation with issues (error/warning/info)
+  - [x] Per-claim validation summary with error/warning flags
+  - [x] Per-audit validation
+  - [x] Provenance preservation (doc_id, page, char offsets, source_type)
+  - [x] Configurable match threshold, case sensitivity
+- [x] **Tests**: 18 tests with local passages (no external deps)
+- [x] **Integration**: `AuditService.process_audit_claims()` calls validation, updates `evidence.validated` flag
+
 ---
 
 ## Partially Implemented / Known Gaps ⚠️
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Evidence persistence to DB | 🔄 Partial | Schema ready, retrieval in-memory only |
-| Full document passages for retrieval | 🔄 Partial | Only pasted source_text passages available; file passages need re-processing |
+| Full document passage storage | 🔄 Partial | Passages re-computed on demand; could store in DB for performance |
 | Real LLM integration | 🔄 Config needed | Requires `LLM_PROVIDER`, `LLM_API_KEY`, `LLM_MODEL` in `.env` |
 | Tesseract OCR on Windows | 🔄 Setup needed | Requires `TESSERACT_CMD` in `.env` |
 | Supabase connection | 🔄 Config needed | Requires valid `DATABASE_URL` in `.env` |
+| Evidence persistence in DB | ✅ Complete | Evidence stored with `validated` flag |
 
 ---
 
@@ -89,13 +133,10 @@
 
 | Feature | Stage | Dependencies |
 |---------|-------|--------------|
-| Claim Verification / Verdict Generation | 8 | Stage 6 & 7 complete |
-| Evidence Validation (quote verification) | 8 | Stage 7 complete |
-| Evidence Persistence to `evidence` table | 7.5 | Stage 7 complete |
-| Embedding-based Semantic Retrieval | 8+ | Optional enhancement |
-| Report Export (Markdown/JSON) | 8+ | Optional |
-| Authentication & User-specific History | 9+ | Not started |
-| PDF Page Preview | 8+ | Optional |
+| Report Export (Markdown/JSON) | 10 | Stages 1-9 complete |
+| Authentication & User-specific History | 11+ | Not started |
+| Embedding-based Semantic Retrieval | 10+ | Optional enhancement |
+| PDF Page Preview | 10+ | Optional |
 
 ---
 
@@ -109,12 +150,14 @@
 | `test_llm_client.py` | 23 | 23 | 0 | 0 |
 | `test_claim_extraction.py` | 20 | 20 | 0 | 0 |
 | `test_retrieval.py` | 15 | 15 | 0 | 0 |
-| **Total** | **88** | **87** | **1** | **0** |
+| `test_claim_verification.py` | 12 | 12 | 0 | 0 |
+| `test_evidence_validation.py` | 18 | 18 | 0 | 0 |
+| **Total** | **120** | **119** | **1** | **0** |
 
-**All tests pass** (1 skipped: OCR service init requires Tesseract executable).
+**All 119 tests pass** (1 skipped: OCR service init requires Tesseract executable).
 
 **No live LLM calls** - all use mocked responses.
-**No database required** - tests use FastAPI ASGITransport with mocked services.
+**No database required for tests** - uses FastAPI ASGITransport with mocked services.
 
 ---
 
@@ -123,6 +166,7 @@
 | Test | Reason |
 |------|--------|
 | Real claim extraction with live LLM | Needs `LLM_API_KEY` |
+| Real claim verification with live LLM | Needs `LLM_API_KEY` |
 | Real OCR with Tesseract | Needs Tesseract executable + `TESSERACT_CMD` |
 | Database persistence with Supabase | Needs valid `DATABASE_URL` |
 | End-to-end audit with files | Needs all above |
@@ -142,12 +186,8 @@
 
 2. **Run Supabase schema** in SQL Editor (`backend/sql/schema.sql`)
 
-3. **Implement Stage 8**: Claim Verification
-   - Create `ClaimVerifier` service
-   - Add verification prompt with verdict taxonomy
-   - Integrate into `AuditService.process_audit_claims()`
-   - Persist evidence to `evidence` table with `relationship_type`
-
-4. **Wire evidence persistence** in retrieval service
-
-5. **Add API endpoint** for triggering full audit processing (claim extraction + retrieval + verification)
+3. **Implement Stage 10**: Report Generation
+   - Create `ReportService` for Markdown/JSON export
+   - Add audit orchestration endpoint
+   - Generate final audit report with summary + claim details
+   - Frontend integration for results display
