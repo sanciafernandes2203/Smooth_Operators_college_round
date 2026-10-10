@@ -70,7 +70,7 @@ CREATE TABLE evidence (
     document_id UUID REFERENCES source_documents(id) ON DELETE SET NULL,
     passage_text TEXT NOT NULL,
     page_number INTEGER,
-    relationship TEXT NOT NULL CHECK (relationship IN ('supports', 'contradicts', 'context', 'insufficient')),
+    relationship_type TEXT NOT NULL CHECK (relationship_type IN ('supports', 'contradicts', 'context', 'insufficient')),
     validated BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

@@ -65,7 +65,7 @@ cp .env.example .env     # macOS/Linux
 2. Get the **direct PostgreSQL connection string** from Settings → Database
    - Format: `postgresql://postgres:[password]@db.[ref].supabase.co:5432/postgres`
 3. Set `DATABASE_URL` in `.env`
-4. Run the schema (Phase 6):
+4. Run the schema:
    ```bash
    # In Supabase SQL Editor, run the contents of sql/schema.sql
    ```
@@ -81,6 +81,39 @@ Server runs at: http://localhost:8000
 
 API docs: http://localhost:8000/docs
 Health check: http://localhost:8000/api/health
+
+### API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/health` | Service health check |
+| GET | `/api/health/ready` | Service readiness check |
+| POST | `/api/audits` | Create a new audit submission |
+| GET | `/api/audits` | List audit history (paginated) |
+| GET | `/api/audits/{audit_id}` | Get audit details |
+
+#### Create Audit (POST /api/audits)
+
+**Content-Type:** `multipart/form-data`
+
+**Fields:**
+- `answer` (required): The AI-generated answer to audit
+- `source_text` (optional): Pasted source text to audit against
+- `files` (optional): Uploaded source files (not processed in Stage 3)
+
+**Response (201):**
+```json
+{
+  "audit_id": "uuid",
+  "status": "PROCESSING",
+  "created_at": "2026-10-10T12:00:00Z"
+}
+```
+
+**Error Responses:**
+- 400: Missing or empty required fields
+- 413: Input exceeds size limit
+- 500: Database or internal error
 
 ### Running Tests
 
@@ -112,6 +145,8 @@ backend/
 │   │   ├── evidence.py
 │   │   └── errors.py
 │   ├── services/
+│   │   ├── __init__.py
+│   │   ├── audit_service.py
 │   │   ├── documents/
 │   │   ├── llm/
 │   │   ├── retrieval/
@@ -120,13 +155,16 @@ backend/
 │   ├── db/
 │   │   ├── __init__.py
 │   │   ├── database.py
-│   │   ├── audit_repository.py
-│   │   └── history_repository.py
+│   │   ├── models.py
+│   │   └── repositories.py
 │   └── utils/
 │       ├── __init__.py
 │       ├── file_validation.py
 │       └── text_normalizer.py
 ├── tests/
+│   ├── __init__.py
+│   ├── test_health.py
+│   └── test_audits.py
 ├── sql/
 │   └── schema.sql
 ├── requirements.txt

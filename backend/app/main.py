@@ -8,7 +8,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.api.routes import health
+from app.api.routes import health, audits
+from app.db.database import get_database_manager
 
 
 @asynccontextmanager
@@ -24,6 +25,8 @@ async def lifespan(app: FastAPI):
     yield
 
     # Shutdown
+    db_manager = get_database_manager()
+    await db_manager.close()
     print("Shutting down Second Opinion Backend")
 
 
@@ -52,11 +55,7 @@ def create_app() -> FastAPI:
 
     # Include routers
     app.include_router(health.router, prefix="/api", tags=["health"])
-
-    # TODO: Include audit and history routers when implemented
-    # from app.api.routes import audits, history
-    # app.include_router(audits.router, prefix="/api", tags=["audits"])
-    # app.include_router(history.router, prefix="/api", tags=["history"])
+    app.include_router(audits.router, prefix="/api", tags=["audits"])
 
     @app.get("/")
     async def root():
