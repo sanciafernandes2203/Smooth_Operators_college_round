@@ -21,3 +21,8 @@ frontend/dist/
 Thumbs.db
 .vscode/
 .idea/
+
+# IDE/Editor local config
+*.swp
+*.swo
+*~
